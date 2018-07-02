@@ -1,5 +1,14 @@
 # Protonet
 
+### Requirements:
+1. python==3.6 <br>
+2. pytorch 0.4.0
+```
+conda create -n protonet-env python=3.6
+source activate protonet-env
+pip install -r requirements.txt
+```
+
 ### miniImageNet
 [[Google Drive](https://drive.google.com/open?id=16V_ZlkW4SsnNDtnGmaBRq2OoPmUOc5mY)]  (1.1 GB)
 ```
