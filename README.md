@@ -23,6 +23,9 @@ rm -f PATH/TO/data/raw/mini-imagenet.zip
 git clone https://github.com/renmengye/few-shot-ssl-public
 mkdir -p PATH/TO/data/splits/mini_imagenet_split
 mv PATH/TO/few-shot-ssl-public/fewshot/data/mini_imagenet_split/Ravi PATH/TO/data/splits/mini_imagenet_split
+
+# Prepare data
+python prepro/gen_miniImageNet.py
 ```
 
 ### Run:
