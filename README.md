@@ -10,7 +10,7 @@ pip install -r requirements.txt
 ```
 
 ### miniImageNet
-[[Google Drive](https://drive.google.com/uc?id=1HkgrkAwukzEZA0TpO7010PkAOREb2Nuk&export=download)]  (1.1 GB)
+[[Google Drive](https://drive.google.com/uc?id=1HkgrkAwukzEZA0TpO7010PkAOREb2Nuk&export=download)]  (2.9 GB)
 ```
 # Download and place "mini-imagenet.zip" in "PATH/TO/data/raw/mini-imagenet".
 mkdir -p PATH/TO/data/raw/mini-imagenet
