@@ -4,6 +4,9 @@ import csv
 import os
 import os.path as osp
 import random
+import json
+import h5py
+import time
 
 from collections import defaultdict
 
@@ -13,22 +16,65 @@ else:
     from .base import MultiProcessImageLoader
 
 
+def h5load(file_addr, key=None, decode_func=None):
+    data = h5py.File(file_addr, 'r')
+    data = data[key] if not key is None else data
+    data = decode_func(data) if not decode_func is None else data
+    return data
+
+
+class TransformedImageLoader(object):
+    def __init__(self, data_files, imname_index_file):
+        self.im_to_h5id = json.load(open(imname_index_file))
+        print('Loading image raw data')
+        start = time.time()
+        self.data = h5load(data_files)['images'][:]
+        end = time.time()
+        print('Finished loading image raw data, %s s elapsed.' % (end - start))
+
+    def load_images(self, image_files, transform):
+        h5_ids = [self.im_to_h5id[_.split('/')[-1]] for _ in image_files]
+        images = torch.from_numpy(self.data[h5_ids, :])
+        return images, image_files
+
+
 class MiniImageNetDataset(object):
 
-    def __init__(self, csv_dir, split, image_dir, shuffle=True, num_threads=2, transform=None):
+    def __init__(self,
+                 csv_dir,
+                 split,
+                 image_dir,
+                 shuffle=True,
+                 num_threads=2,
+                 transform=None,
+                 transformed_images=None,
+                 imname_index_file=None):
         files = os.listdir(osp.join(csv_dir, split))
         self.do_shuffle = shuffle
         self.image_dir = image_dir
         self.split_names = [f.split('.')[0] for f in files]
         self.split_csvs = dict()
+        self.split_to_images = defaultdict(list)
+        self.split_ixs = defaultdict(lambda: 0)
+        self.file_to_label = dict()
         self.cat_to_files = dict()
         self.cat_ixs = dict()
-        self.image_loader = MultiProcessImageLoader(num_threads, transform)
+
+        if transformed_images is None:
+            self.image_loader = MultiProcessImageLoader(num_threads, transform)
+        else:
+            self.image_loader = TransformedImageLoader(transformed_images, imname_index_file)
+
         for sp in self.split_names:
             csv_file = osp.join(csv_dir, split, sp+".csv")
             self.split_csvs[sp] = self.load_csv_data(csv_file)
             self.cat_to_files[sp] = self.make_categories_to_files(self.split_csvs[sp])
             self.cat_ixs[sp] = dict()
+            for cat, files in self.cat_to_files[sp].items():
+                self.split_to_images[sp] += files
+                self.split_ixs[sp] = 0
+                for f in files:
+                    self.file_to_label[f] = cat
             for cat in self.cat_to_files[sp].keys():
                 self.cat_ixs[sp][cat] = 0
         self.print_stats()
@@ -138,6 +184,28 @@ class MiniImageNetDataset(object):
                 'nshot': nshot,
                 'nquery': nquery,
                 'split': split}
+
+    def get_label_by_filename(self, file_name):
+        return self.file_to_label[file_name]
+
+    def get_batch(self, batch_size, split, transform=None):
+        start = self.split_ixs[split]
+        end = min(len(self.split_to_images[split]), start + batch_size)
+        self.split_ixs[split] = end
+        wrapped = False
+        if end == len(self.split_to_images[split]):
+            wrapped = True
+            self.split_ixs[split] = 0
+        files = self.split_to_images[split][start:end]
+        labels = [self.file_to_label[_] for _ in files]
+        data = self.load_images(files, transform)
+        return {
+            'data': data,
+            'label': labels,
+            'split': split,
+            'wrapped': wrapped,
+            'images': files
+        }
 
 
 if __name__ == '__main__':

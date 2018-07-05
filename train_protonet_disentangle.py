@@ -2,6 +2,8 @@ import sys
 import os
 import pdb
 import json
+import numpy as np
+import math
 import tqdm
 import pprint
 import torch
@@ -41,11 +43,22 @@ def train(episodes, configs):
     loss_val, state = net(data)
     ind_norm_max, den_norm_max = state['ind_norm_max'], state['den_norm_max']
     ind_norm_min, den_norm_min = state['ind_norm_min'], state['den_norm_min']
-    if (episodes-1) % 10 == 0:
-        print('[Train](%d-way, %d-shot) Iteration [%d]: ind_norm_max: %.4f, ind_norm_min: %.4f, den_norm_max: %.4f, den_norm_min: %.4f' %
-                (training.nway, training.nshot, episodes, ind_norm_max, ind_norm_min, den_norm_max, den_norm_min))
+    if (episodes-1) % 50 == 0:
+        print('[Train](%d-way, %d-shot) Iteration [%d]: ind_norm_max: %.4f, '
+              'ind_norm_min: %.4f, den_norm_max: %.4f, den_norm_min: %.4f' %(training.nway, training.nshot,
+                                                                             episodes, ind_norm_max, ind_norm_min,
+                                                                             den_norm_max, den_norm_min))
         print('[Train](%d-way, %d-shot) Iteration [%d]: loss: %.4f, acc: %.2f%%, ce_loss: %.4f, recon_loss: %.4f' % (
-            training.nway, training.nshot, episodes, state['loss'], state['acc']*100, state['ce_loss'], state['recon_loss']))
+            training.nway, training.nshot, episodes, state['loss'], state['acc']*100, state['ce_loss'],
+            state['recon_loss']))
+
+        logger.info('[Train](%d-way, %d-shot) Iteration [%d]: ind_norm_max: %.4f, '
+                    'ind_norm_min: %.4f, den_norm_max: %.4f, den_norm_min: %.4f' %
+                    (training.nway, training.nshot, episodes, ind_norm_max, ind_norm_min, den_norm_max, den_norm_min))
+        logger.info('[Train](%d-way, %d-shot) Iteration [%d]: loss: %.4f, '
+                    'acc: %.2f%%, ce_loss: %.4f, recon_loss: %.4f' % (training.nway, training.nshot, episodes,
+                                                                      state['loss'], state['acc'] * 100,
+                                                                      state['ce_loss'], state['recon_loss']))
 
     writer.add_scalar('train_loss', state['loss'], episodes)
     writer.add_scalar('train_acc', state['acc'], episodes)
@@ -69,30 +82,63 @@ def test(split, configs):
         _, state = net(data)
         ind_norm_max, den_norm_max = state['ind_norm_max'], state['den_norm_max']
         ind_norm_min, den_norm_min = state['ind_norm_min'], state['den_norm_min']
-        print('[%s](%d-way, %d-shot) Iteration [%d]: ind_norm_max: %.4f, den_norm_max: %.4f, ind_norm_min: %.4f, den_norm_min: %.4f' %
-                (split, testing.nway, testing.nshot, episode, ind_norm_max, den_norm_max, ind_norm_min, den_norm_min))
-        print('[%s](%d-way, %d-shot) Iteration [%d]: loss: %.4f, acc: %.2f%%, ce_loss: %.4f, recon_loss: %.4f' % (
-            split, testing.nway, testing.nshot, episode, state['loss'], state['acc'] * 100, state['ce_loss'], state['recon_loss']))
+
+        logger.info('[%s](%d-way, %d-shot) Iteration [%d]: ind_norm_max: %.4f, '
+                    'den_norm_max: %.4f, ind_norm_min: %.4f, den_norm_min: %.4f' % (split, testing.nway,
+                                                                                    testing.nshot, episode,
+                                                                                    ind_norm_max, den_norm_max,
+                                                                                    ind_norm_min, den_norm_min))
+
+        logger.info('[%s](%d-way, %d-shot) Iteration [%d]: loss: %.4f, acc: %.2f%%, '
+                    'ce_loss: %.4f, recon_loss: %.4f' % (split, testing.nway, testing.nshot,
+                                                         episode, state['loss'], state['acc'] * 100,
+                                                         state['ce_loss'], state['recon_loss']))
         accs.append(state['acc'])
         loss.append(state['loss'])
 
     mean_acc = sum(accs)/len(accs)
+    std = np.std(accs) * 1.96 / math.sqrt(len(accs))
     writer.add_scalar('%s_acc' % split, mean_acc, epochs)
     writer.add_scalar('%s_loss' % split, sum(loss)/len(loss), epochs)
-
+    print('[%s] Epoch[%d], acc: %.2f +/- %.2f' % (split, epochs, mean_acc * 100, std * 100))
+    logger.info('[%s] Epoch[%d], acc: %.2f +/- %.2f' % (split, epochs, mean_acc * 100, std * 100))
     return mean_acc
+
+
+def extract_features(split, configs):
+    global net, dataloader, logger, writer, epochs
+    net = net.eval()
+    ind_feats = []
+    den_feats = []
+    feats = []
+    images = []
+    labels = []
+    batch_size = 128
+    wrapped = False
+    while not wrapped:
+        data = dataloader.get_batch(batch_size, split)
+        labels.extend(data['label'])
+        zs = net.extract(data)
+        feats.append(zs['z'])
+        ind_feats.append(zs['ind_z'])
+        den_feats.append(zs['den_z'])
+        wrapped = data['wrapped']
+        images.extend(data['images'])
+    return torch.cat(feats, 0), torch.cat(ind_feats, 0), torch.cat(den_feats, 0), images, labels
 
 
 def build_model(configs):
     model = configs.model
     encoder = ProtoConvNet(model.x_dim, model.hid_dim, model.z_dim)
-    disentangle = ProtoDisentangle(1600, 300, 300)
+    disentangle = ProtoDisentangle(1600, 512, 1024)
     return ProtonetDisentangle(encoder, disentangle)
 
 
 def build_dataset(configs):
     d = configs.dataloader
-    return MiniImageNetDataset(d.csv_dir, d.split, d.image_dir, d.shuffle, d.num_threads, d.transform)
+    return MiniImageNetDataset(d.csv_dir, d.split, d.image_dir,
+                               d.shuffle, d.num_threads, d.transform,
+                               d.transformed_images, d.imname_index_file)
 
 
 def init_model(model: nn.Module, configs):
@@ -183,9 +229,16 @@ def main(configs, args):
                 acc = test('test', configs)
                 optim_path = configs.ckpt.save_optim_path
                 model_path = configs.ckpt.save_model_path
+                z, ind_z, den_z, images, labels = extract_features('test', configs)
                 if not configs.do_test:
                     torch.save({'model': net.state_dict()}, os.path.join(model_path, 'model_%d.pth' % iteration))
                     torch.save({'optim': optimizer.state_dict()}, os.path.join(optim_path, 'optim_%d.pth' % iteration))
+                    torch.save({'z': z.numpy(),
+                                'ind_z': ind_z.numpy(),
+                                'den_z': den_z.numpy(),
+                                'labels': labels,
+                                'images': images},
+                               os.path.join(model_path, 'results_%d.pth' % iteration))
                     if acc > best_acc:
                         best_acc = acc
                         torch.save({'model': net.state_dict()}, os.path.join(model_path, 'model_best.pth'))

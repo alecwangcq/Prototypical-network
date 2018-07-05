@@ -60,7 +60,7 @@ class ProtonetDisentangle(nn.Module):
     def forward(self, data):
         x = data['data'].cuda()
         z = self.encoder(x)  # [nway*(nshot + nquery), z_dim]
-
+        zz = z
         n_class = data['nway']
         n_support = data['nshot']
         n_query = data['nquery']
@@ -97,7 +97,20 @@ class ProtonetDisentangle(nn.Module):
                           'den_norm_min': den_norm_min,
                           'ind_norm_max': ind_norm_max,
                           'den_norm_max': den_norm_max,
-                          'acc': acc_val.data.cpu().item()}
+                          'acc': acc_val.data.cpu().item(),
+                          'nway': n_class,
+                          'nquery': n_query,
+                          'nsupport': n_support,
+                          'ind_z': ind_z.cpu().data,
+                          'den_z': den_z.cpu().data,
+                          'z': zz.cpu().data}
+
+    def extract(self, data):
+        x = data['data'].cuda()
+        z = self.encoder(x)
+        ind_z, den_z = self.disentangle.encoding(z)
+
+        return {'ind_z': ind_z.cpu().data, 'den_z': den_z.cpu().data, 'z': z.cpu().data}
 
 
 if __name__ == '__main__':

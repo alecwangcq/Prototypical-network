@@ -36,7 +36,16 @@ class Protonet(nn.Module):
         acc_val = torch.eq(y_hat, target_inds.squeeze()).float().mean()
 
         return loss_val, {'loss': loss_val.data.cpu().item(),
-                          'acc': acc_val.data.cpu().item()}
+                          'acc': acc_val.data.cpu().item(),
+                          'nway': n_class,
+                          'nquery': n_query,
+                          'nsupport': n_support,
+                          'z': z.cpu().data}
+
+    def extract(self, data):
+        x = data['data'].cuda()
+        z = self.encoder(x)
+        return {'z': z.cpu().data}
 
 
 if __name__ == '__main__':

@@ -2,7 +2,9 @@ import sys
 import os
 import pdb
 import json
+import math
 import tqdm
+import numpy as np
 import pprint
 import torch
 import torch.nn as nn
@@ -39,6 +41,8 @@ def train(episodes, configs):
 
     loss_val, state = net(data)
     if episodes % 50 == 0:
+        logger.info('[Train](%d-way, %d-shot) Iteration [%d]: loss: %.4f, acc: %.2f%%' % (
+            training.nway, training.nshot, episodes, state['loss'], state['acc']*100))
         print('[Train](%d-way, %d-shot) Iteration [%d]: loss: %.4f, acc: %.2f%%' % (
             training.nway, training.nshot, episodes, state['loss'], state['acc']*100))
 
@@ -52,7 +56,7 @@ def train(episodes, configs):
 
 
 def test(split, configs):
-    global net, dataloader, optimizer, lr_scheduler, logger, writer, epochs
+    global net, dataloader, logger, writer, epochs
     net = net.eval()
 
     testing = configs.testing
@@ -62,16 +66,39 @@ def test(split, configs):
     for episode in tqdm.tqdm(range(testing.n_episodes), desc="Epoch %d, %s" % (epochs, split)):
         data = dataloader.get_episode(testing.nway, testing.nshot, testing.nquery, split)
         _, state = net(data)
-        print('[%s](%d-way, %d-shot) Iteration [%d]: loss: %.4f, acc: %.2f%%' % (
+        logger.info('[%s](%d-way, %d-shot) Iteration [%d]: loss: %.4f, acc: %.2f%%' % (
             split, testing.nway, testing.nshot, episode, state['loss'], state['acc'] * 100))
+        # print('[%s](%d-way, %d-shot) Iteration [%d]: loss: %.4f, acc: %.2f%%' % (
+        #     split, testing.nway, testing.nshot, episode, state['loss'], state['acc'] * 100))
         accs.append(state['acc'])
         loss.append(state['loss'])
 
     mean_acc = sum(accs)/len(accs)
+    std = np.std(accs) * 1.96 / math.sqrt(len(accs))
     writer.add_scalar('%s_acc' % split, mean_acc, epochs)
     writer.add_scalar('%s_loss' % split, sum(loss)/len(loss), epochs)
-
+    print('[%s] Epoch[%d], acc: %.2f +/- %.2f' % (split, epochs, mean_acc*100, std*100))
+    logger.info('[%s] Epoch[%d], acc: %.2f +/- %.2f' % (split, epochs, mean_acc*100, std*100))
     return mean_acc
+
+
+def extract_features(split, configs):
+    global net, dataloader, logger, writer, epochs
+    net = net.eval()
+    feats = []
+    images = []
+    labels = []
+    batch_size = 128
+    wrapped = False
+    while not wrapped:
+        data = dataloader.get_batch(batch_size, split)
+        labels.extend(data['label'])
+        zs = net.extract(data)
+        feats.append(zs['z'])
+        wrapped = data['wrapped']
+        images.extend(data['images'])
+
+    return torch.cat(feats, 0), images, labels
 
 
 def build_model(configs):
@@ -82,7 +109,9 @@ def build_model(configs):
 
 def build_dataset(configs):
     d = configs.dataloader
-    return MiniImageNetDataset(d.csv_dir, d.split, d.image_dir, d.shuffle, d.num_threads, d.transform)
+    return MiniImageNetDataset(d.csv_dir, d.split, d.image_dir,
+                               d.shuffle, d.num_threads, d.transform,
+                               d.transformed_images, d.imname_index_file)
 
 
 def init_model(model: nn.Module, configs):
@@ -173,9 +202,14 @@ def main(configs, args):
                 acc = test('test', configs)
                 optim_path = configs.ckpt.save_optim_path
                 model_path = configs.ckpt.save_model_path
+                z, images, labels = extract_features('test', configs)
                 if not configs.do_test:
                     torch.save({'model': net.state_dict()}, os.path.join(model_path, 'model_%d.pth' % iteration))
                     torch.save({'optim': optimizer.state_dict()}, os.path.join(optim_path, 'optim_%d.pth' % iteration))
+                    torch.save({'z': z.numpy(),
+                                'labels': labels,
+                                'images': images},
+                               os.path.join(model_path, 'results_%d.pth' % iteration))
                     if acc > best_acc:
                         best_acc = acc
                         torch.save({'model': net.state_dict()}, os.path.join(model_path, 'model_best.pth'))

@@ -35,22 +35,19 @@ def conv_block(in_channels, out_channels):
 class ProtoDisentangle(nn.Module):
     def __init__(self, in_dim, ind_dim, den_dim):
         super(ProtoDisentangle, self).__init__()
-        self.encoder_ind = nn.Sequential(nn.Dropout(0.5),
-                                         nn.Linear(in_dim, in_dim),
-                                         nn.Dropout(0.5),
-                                         nn.LeakyReLU(),
-                                         nn.Linear(in_dim, ind_dim))
-        self.encoder_den = nn.Sequential(nn.Dropout(0.5),
-                                         nn.Linear(in_dim, in_dim),
-                                         nn.Dropout(0.5),
-                                         nn.LeakyReLU(),
-                                         nn.Linear(in_dim, den_dim))
+        self.encoder_ind = nn.Sequential(nn.Linear(in_dim, ind_dim),
+                                         nn.ReLU(),
+                                         nn.Linear(ind_dim, ind_dim),
+                                         nn.ReLU())
+        self.encoder_den = nn.Sequential(nn.Linear(in_dim, den_dim),
+                                         nn.ReLU(),
+                                         nn.Linear(den_dim, den_dim),
+                                         nn.ReLU())
 
-        self.decoder = nn.Sequential(nn.Dropout(0.5),
-                                     nn.Linear(ind_dim+den_dim, in_dim),
-                                     nn.Dropout(0.5),
-                                     nn.LeakyReLU(),
-                                     nn.Linear(in_dim, in_dim))
+        self.decoder = nn.Sequential(nn.Linear(ind_dim+den_dim, in_dim),
+                                     nn.ReLU(),
+                                     nn.Linear(in_dim, in_dim),
+                                     nn.ReLU())
 
     def encoding(self, x):
         return self.encoder_ind(x), self.encoder_den(x)

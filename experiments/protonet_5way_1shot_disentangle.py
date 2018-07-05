@@ -28,6 +28,8 @@ def protonet_5way_1shot_disentangle():
     __dataloader.num_threads = 4
     __dataloader.transform = transforms.Compose([transforms.Resize((84, 84)),
                                                  transforms.ToTensor()])
+    __dataloader.transformed_images = 'data/raw/mini-imagenet.h5'
+    __dataloader.imname_index_file = 'data/raw/mini-imagenet-indices.json'
 
     # setup optimizer
     __optimizer = edict()
