@@ -10,14 +10,14 @@ pip install -r requirements.txt
 ```
 
 ### miniImageNet
-[[Google Drive](https://drive.google.com/open?id=16V_ZlkW4SsnNDtnGmaBRq2OoPmUOc5mY)]  (1.1 GB)
+[[Google Drive](https://drive.google.com/uc?id=1HkgrkAwukzEZA0TpO7010PkAOREb2Nuk&export=download)]  (1.1 GB)
 ```
-# Download and place "mini-imagenet.tar.gz" in "PATH/TO/data/raw/mini-imagenet".
+# Download and place "mini-imagenet.zip" in "PATH/TO/data/raw/mini-imagenet".
 mkdir -p PATH/TO/data/raw/mini-imagenet
 cd data/mini-imagenet
-mv PATH/TO/mini-imagenet.tar.gz PATH/TO/data/raw/
-tar -xzvf PATH/TO/data/raw/mini-imagenet.tar.gz
-rm -f PATH/TO/data/raw/mini-imagenet.tar.gz
+mv PATH/TO/mini-imagenet.zip  PATH/TO/data/raw/
+unzip PATH/TO/data/raw/mini-imagenet.zip 
+rm -f PATH/TO/data/raw/mini-imagenet.zip 
 
 # Download and place Ravi split in "PATH/TO/data/splits/mini_imagenet_split"
 git clone https://github.com/renmengye/few-shot-ssl-public
